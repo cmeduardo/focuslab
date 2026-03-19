@@ -46,31 +46,33 @@ export const useHabitStore = create<HabitState>((set, get) => ({
     }
 
     // Cargar todos los logs agrupados por habit_id
+    // Nota: la columna en DB se llama completed_at (DATE), no "date"
     const habitIds = habitsData.map((h) => h.id)
-    let logsData: Array<{ habit_id: string; date: string }> = []
+    let logsData: Array<{ habit_id: number; completed_at: string }> = []
 
     if (habitIds.length > 0) {
       const { data } = await supabase
         .from('habit_logs')
-        .select('habit_id, date')
+        .select('habit_id, completed_at')
         .eq('user_id', user.id)
         .in('habit_id', habitIds)
       logsData = data ?? []
     }
 
-    // Agrupar logs por hábito
+    // Agrupar logs por hábito (habit_id es BIGINT, convertir a string para el mapa)
     const logsByHabit: Record<string, string[]> = {}
     for (const log of logsData) {
-      if (!logsByHabit[log.habit_id]) logsByHabit[log.habit_id] = []
-      logsByHabit[log.habit_id].push(log.date)
+      const key = String(log.habit_id)
+      if (!logsByHabit[key]) logsByHabit[key] = []
+      logsByHabit[key].push(log.completed_at)
     }
 
     const habits: Habit[] = habitsData.map((h) => ({
-      id: h.id,
+      id: String(h.id), // BIGINT en DB → string en frontend
       name: h.name,
       icon: h.icon,
       color: h.color,
-      logs: logsByHabit[h.id] ?? [],
+      logs: logsByHabit[String(h.id)] ?? [],
       createdAt: h.created_at,
     }))
 
@@ -95,7 +97,7 @@ export const useHabitStore = create<HabitState>((set, get) => ({
 
     if (!error && data) {
       const newHabit: Habit = {
-        id: data.id,
+        id: String(data.id), // BIGINT en DB → string en frontend
         name: data.name,
         icon: data.icon,
         color: data.color,
@@ -149,11 +151,11 @@ export const useHabitStore = create<HabitState>((set, get) => ({
         .delete()
         .eq('habit_id', habitId)
         .eq('user_id', user.id)
-        .eq('date', dateKey)
+        .eq('completed_at', dateKey) // columna real en DB es completed_at
     } else {
       const { error } = await supabase
         .from('habit_logs')
-        .insert({ habit_id: habitId, user_id: user.id, date: dateKey })
+        .insert({ habit_id: habitId, user_id: user.id, completed_at: dateKey }) // columna real en DB es completed_at
 
       if (error) {
         // Revertir si falla la inserción

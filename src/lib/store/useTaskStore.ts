@@ -21,13 +21,28 @@ export interface Task {
   completedAt: string | null
 }
 
+// Mapea status del frontend al ENUM de PostgreSQL
+// DB enum: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+// Frontend: 'todo' | 'in_progress' | 'done'
+function statusToDb(status: TaskStatus): string {
+  if (status === 'todo') return 'pending'
+  if (status === 'done') return 'completed'
+  return status // 'in_progress' coincide
+}
+
+function statusFromDb(status: string): TaskStatus {
+  if (status === 'pending') return 'todo'
+  if (status === 'completed' || status === 'cancelled') return 'done'
+  return 'in_progress'
+}
+
 // Mapea fila de DB (snake_case) a Task (camelCase)
 function rowToTask(row: Record<string, unknown>): Task {
   return {
-    id: row.id as string,
+    id: String(row.id), // BIGINT en DB → string en frontend
     title: row.title as string,
     description: (row.description as string) ?? '',
-    status: row.status as TaskStatus,
+    status: statusFromDb(row.status as string),
     priority: row.priority as TaskPriority,
     dueDate: (row.due_date as string) ?? null,
     estimatedPomodoros: (row.estimated_pomodoros as number) ?? 0,
@@ -100,7 +115,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         user_id: user.id,
         title: taskData.title,
         description: taskData.description,
-        status: taskData.status,
+        status: statusToDb(taskData.status), // mapear 'todo'→'pending', 'done'→'completed'
         priority: taskData.priority,
         due_date: taskData.dueDate,
         estimated_pomodoros: taskData.estimatedPomodoros,
@@ -132,7 +147,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const dbUpdates: Record<string, unknown> = {}
     if (updates.title !== undefined) dbUpdates.title = updates.title
     if (updates.description !== undefined) dbUpdates.description = updates.description
-    if (updates.status !== undefined) dbUpdates.status = updates.status
+    if (updates.status !== undefined) dbUpdates.status = statusToDb(updates.status)
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate
     if (updates.estimatedPomodoros !== undefined) dbUpdates.estimated_pomodoros = updates.estimatedPomodoros
@@ -160,7 +175,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     const supabase = createClient()
     await supabase
       .from('tasks')
-      .update({ status, completed_at: status === 'done' ? new Date().toISOString() : null })
+      .update({ status: statusToDb(status), completed_at: status === 'done' ? new Date().toISOString() : null })
       .eq('id', id)
       .eq('user_id', user.id)
   },

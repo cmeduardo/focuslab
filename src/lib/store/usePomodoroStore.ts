@@ -133,13 +133,14 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => ({
     if (mode !== 'focus') return
 
     const supabase = createClient()
+    // Columnas reales: ended_at (no completed_at), completed (bool), sin campo mode
     await supabase.from('pomodoro_sessions').insert({
       user_id: user.id,
       task_id: linkedTask?.id ?? null,
-      mode,
       duration_seconds: durations[mode],
       started_at: startedAt ? new Date(startedAt).toISOString() : new Date().toISOString(),
-      completed_at: new Date().toISOString(),
+      ended_at: new Date().toISOString(),
+      completed: true,
       interruptions,
       focus_rating: focusRating,
     })
