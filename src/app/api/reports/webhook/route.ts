@@ -7,14 +7,24 @@ import { createClient } from "@supabase/supabase-js";
 
 const N8N_WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET!;
 
-// Usamos service role para poder actualizar sin auth de usuario
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function POST(req: NextRequest) {
   try {
+    // Verificar que la service role key está configurada
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!serviceRoleKey) {
+      console.error("SUPABASE_SERVICE_ROLE_KEY no está configurada");
+      return NextResponse.json(
+        { error: "Configuración del servidor incompleta: falta SUPABASE_SERVICE_ROLE_KEY" },
+        { status: 500 }
+      );
+    }
+
+    // Inicializar admin client aquí para usar la key verificada
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      serviceRoleKey
+    );
+
     // --- Validar el secret ---
     const secret = req.headers.get("X-Webhook-Secret");
     if (secret !== N8N_WEBHOOK_SECRET) {
@@ -33,14 +43,14 @@ export async function POST(req: NextRequest) {
     }
 
     // --- Actualizar el reporte ---
-    const updateData: Record<string, unknown> = {
-      status, // "completed" o "failed"
-      updated_at: new Date().toISOString(),
-    };
+    const updateData: Record<string, unknown> = { status };
 
     if (status === "completed" && ai_analysis) {
       updateData.ai_analysis = ai_analysis;
-      updateData.completed_at = new Date().toISOString();
+      // Extraer campos de primer nivel que la tabla almacena por separado
+      updateData.attention_profile = ai_analysis.attention_profile ?? null;
+      updateData.recommendations = ai_analysis.recommendations ?? null;
+      updateData.analyzed_at = new Date().toISOString();
     }
 
     const { error: updateError } = await supabaseAdmin
@@ -50,8 +60,14 @@ export async function POST(req: NextRequest) {
 
     if (updateError) {
       console.error("Error actualizando reporte:", updateError);
+      // Devolver el error real de Supabase para diagnóstico
       return NextResponse.json(
-        { error: "Error al actualizar el reporte" },
+        {
+          error: "Error al actualizar el reporte",
+          detail: updateError.message,
+          code: updateError.code,
+          hint: updateError.hint,
+        },
         { status: 500 }
       );
     }

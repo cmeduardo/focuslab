@@ -69,11 +69,10 @@ export async function POST(req: NextRequest) {
       .lte("created_at", periodEnd.toISOString());
 
     const allSessions = sessions || [];
-    const completedPomodoros = allSessions.filter(
-      (s) => s.status === "completed"
-    );
+    // pomodoro_sessions usa campo `completed boolean`, no `status`
+    const completedPomodoros = allSessions.filter((s) => s.completed === true);
     const interruptedPomodoros = allSessions.filter(
-      (s) => s.status === "interrupted"
+      (s) => s.completed === false && s.ended_at != null
     );
 
     // --- Obtener actividades cognitivas del período ---
